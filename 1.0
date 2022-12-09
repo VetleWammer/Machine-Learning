@@ -1,0 +1,166 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+
+// Define data structure of a training example
+typedef struct example {
+  float *inputs;
+  float output;
+} Example;
+
+// Define data structure of a neural network
+typedef struct neural_net {
+  int num_layers;
+  int *layer_sizes;
+  float ***weights;
+  float **biases;
+} NeuralNet;
+
+// Allocate memory for a new neural network
+NeuralNet* allocate_nn(int num_layers, int *layer_sizes){
+  NeuralNet *nn = (NeuralNet*) malloc(sizeof(NeuralNet));
+  
+  nn->num_layers = num_layers;
+  nn->layer_sizes = layer_sizes;
+  
+  nn->weights = (float***) malloc(sizeof(float**) * (num_layers - 1));
+  nn->biases = (float**) malloc(sizeof(float*) * (num_layers - 1));
+  
+  for (int i = 0; i < num_layers - 1; i++) {
+    nn->weights[i] = (float**) malloc(sizeof(float*) * layer_sizes[i]);
+    nn->biases[i] = (float*) malloc(sizeof(float) * layer_sizes[i + 1]);
+    
+    for (int j = 0; j < layer_sizes[i]; j++) {
+      nn->weights[i][j] = (float*) malloc(sizeof(float) * layer_sizes[i + 1]);
+    }
+  }
+  
+  return nn;
+}
+
+// Initialize weights and biases of neural network
+void initialize_nn(NeuralNet *nn){
+  for (int i = 0; i < nn->num_layers - 1; i++) {
+    for (int j = 0; j < nn->layer_sizes[i]; j++) {
+      for (int k = 0; k < nn->layer_sizes[i + 1]; k++) {
+        nn->weights[i][j][k] = (float)rand()/(float)(RAND_MAX/2) - 1;
+      }
+      nn->biases[i][j] = (float)rand()/(float)(RAND_MAX/2) - 1;
+    }
+  }
+}
+
+// Calculate the output of a neural network
+float* feed_forward(NeuralNet *nn, float *inputs){
+  float *activations = (float*) malloc(sizeof(float) * nn->layer_sizes[0]);
+  for (int i = 0; i < nn->layer_sizes[0]; i++) {
+    activations[i] = inputs[i];
+  }
+  
+  for (int i = 0; i < nn->num_layers - 1; i++) {
+    float *new_activations = (float*) malloc(sizeof(float) * nn->layer_sizes[i + 1]);
+    
+    for (int j = 0; j < nn->layer_sizes[i + 1]; j++) {
+      float sum = 0;
+      
+      for (int k = 0; k < nn->layer_sizes[i]; k++) {
+        sum += activations[k] * nn->weights[i][k][j];
+      }
+      
+      new_activations[j] = sum + nn->biases[i][j];
+    }
+    
+    free(activations);
+    activations = new_activations;
+  }
+  
+  return activations;
+}
+
+// Update weights and biases using backpropagation
+void backpropagate(NeuralNet *nn, Example e, float learning_rate){
+  // Calculate output
+  float *outputs = feed_forward(nn, e.inputs);
+  
+  // Calculate error in output layer
+  float *output_errors = (float*) malloc(sizeof(float) * nn->layer_sizes[nn->num_layers - 1]);
+  for (int i = 0; i < nn->layer_sizes[nn->num_layers - 1]; i++) {
+    output_errors[i] = outputs[i] - e.output;
+  }
+  
+  // Backpropagate error
+  for (int i = nn->num_layers - 2; i >= 0; i--) {
+    float *error = (float*) malloc(sizeof(float) * nn->layer_sizes[i]);
+    
+    for (int j = 0; j < nn->layer_sizes[i]; j++) {
+      float sum = 0;
+      
+      for (int k = 0; k < nn->layer_sizes[i + 1]; k++) {
+        sum += output_errors[k] * nn->weights[i][j][k];
+      }
+      
+      error[j] = sum;
+    }
+    
+    // Update weights and biases
+    for (int j = 0; j < nn->layer_sizes[i]; j++) {
+      for (int k = 0; k < nn->layer_sizes[i + 1]; k++) {
+        nn->weights[i][j][k] -= learning_rate * output_errors[k] * outputs[j];
+      }
+      nn->biases[i][j] -= learning_rate * error[j];
+    }
+    
+    // Free memory
+    free(output_errors);
+    output_errors = error;
+  }
+  
+  free(output_errors);
+  free(outputs);
+}
+
+// Train neural network using given data set
+void train(NeuralNet *nn, Example *examples, int num_examples, float learning_rate, int num_epochs){
+  for (int i = 0; i < num_epochs; i++) {
+    for (int j = 0; j < num_examples; j++) {
+      backpropagate(nn, examples[j], learning_rate);
+    }
+  }
+}
+
+int main(){
+  // Create neural network
+  int layer_sizes[] = {2, 3, 1};
+  NeuralNet *nn = allocate_nn(3, layer_sizes);
+  initialize_nn(nn);
+  
+  // Create data set
+  Example e1;
+  e1.inputs = (float[]) {1.0, 1.0};
+  e1.output = 0.0;
+  
+  Example e2;
+  e2.inputs = (float[]) {1.0, 0.0};
+  e2.output = 1.0;
+  
+  Example e3;
+  e3.inputs = (float[]) {0.0, 1.0};
+  e3.output = 1.0;
+  
+  Example e4;
+  e4.inputs = (float[]) {0.0, 0.0};
+  e4.output = 0.0;
+  
+  Example examples[] = {e1, e2, e3, e4};
+  int num_examples = 4;
+  
+  // Train neural network
+  train(nn, examples, num_examples, 0.1, 1000);
+  
+  // Test neural network
+  float *outputs = feed_forward(nn, (float[]) {1.0, 0.0});
+  printf("Output: %f\n", outputs[0]);
+  
+  free(outputs);
+  return 0;
+}
